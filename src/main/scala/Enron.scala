@@ -1,6 +1,4 @@
-//import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
-import scala.util.parsing.combinator.syntactical
 
 object Enron extends App {
   val conf = new SparkConf()
@@ -10,7 +8,16 @@ object Enron extends App {
 
   //val hiveCtx = new HiveContext(sc)
 
-  case class Email(date: String, subject: String, from: String, to: Array[String], cc: Array[String], bcc: Array[String])
+  case class Email(date: String, subject: String, from: String, to: Array[String], cc: Array[String], bcc: Array[String]){
+//    override def toString() = {
+//      date + ",\n" +
+//      subject + ",\n" +
+//      from + ",\n" +
+//      "To: " + to mkString(",\n\t") +
+//        "Cc: " + cc mkString(",\n\t") +
+//        "Bcc: " + bcc mkString(",\n\t")
+//    }
+  }
 
   def emailSplit(emText: String): Email = {
     val em = emText replaceAll("\n", " ") split (" ") filter (x => x.length > 0)
@@ -34,21 +41,14 @@ object Enron extends App {
       emailSplit0(em, "Bcc:", new Array[String](0)))
   }
 
-  val emails = sc.wholeTextFiles("/home/nnon/dev/enron/maildir/hernandez-j/jrhernandez/*.", 2).cache()
+  val emails = sc.wholeTextFiles("/home/nnon/dev/enron/maildir/hernandez-j/inbox/*.", 2).cache()
+  println(emails.count())
   val emailLines = emails.mapValues(emailSplit).distinct().cache()
   val emailFrom = emailLines.mapValues(em => em.from)
   val emailTo = emailLines.mapValues(em => em.to.mkString(",")).flatMapValues(to => to split(",")).filter(x => !x._2.isEmpty)
   val emailDetails = emailFrom.join(emailTo).values
+    .map{case(from: String, to: String) => ((from, to), 1)}
+    .reduceByKey(_ + _)
 
   val local = emailDetails.take(20).foreach(println(_))//.foreach(line => println(line._1, line._2._1, line._2._2.mkString(" ")))
-//  val local = emailLines take(20) //foreach(println _)
 }
-
-
-
-
-
-
-
-//  val headerPattern = "(?!X-)From: [\\S\\s]*Mime-Version:".r
-//  flatMapValues(headerPattern findFirstIn _).
