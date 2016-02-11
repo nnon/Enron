@@ -41,14 +41,16 @@ object Enron extends App {
       emailSplit0(em, "Bcc:", new Array[String](0)))
   }
 
-  val emails = sc.wholeTextFiles("/home/nnon/dev/enron/maildir/hernandez-j/inbox/*.", 2).cache()
-  println(emails.count())
-  val emailLines = emails.mapValues(emailSplit).distinct().cache()
+  val emails = sc.wholeTextFiles("/home/nnon/dev/enron/maildir/*/*/*.", 2)
+  val emailLines = emails.mapValues(emailSplit).cache()
   val emailFrom = emailLines.mapValues(em => em.from)
-  val emailTo = emailLines.mapValues(em => em.to.mkString(",")).flatMapValues(to => to split(",")).filter(x => !x._2.isEmpty)
-  val emailDetails = emailFrom.join(emailTo).values
-    .map{case(from: String, to: String) => ((from, to), 1)}
+  val emailTo = emailLines.mapValues(em => em.to.mkString(",")).flatMapValues(to => to split(",")).filter(x => !x._2.isEmpty).cache()
+  val emailDetails = emailFrom.fullOuterJoin(emailTo)
+    .values
+    .map{case(from, to) => ((from.getOrElse("No Sender"), to.getOrElse("No recipient")), 1)}
     .reduceByKey(_ + _)
+    .map(item => item swap)
+    .sortByKey(false)
 
-  val local = emailDetails.take(20).foreach(println(_))//.foreach(line => println(line._1, line._2._1, line._2._2.mkString(" ")))
+  emailDetails.saveAsTextFile("topEmails.txt")//.foreach(println(_))//.foreach(line => println(line._1, line._2._1, line._2._2.mkString(" ")))
 }
