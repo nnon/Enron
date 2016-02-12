@@ -1,23 +1,14 @@
 import org.apache.spark.{SparkConf, SparkContext}
 
-object Enron extends App {
+import scala.reflect.io.File
+
+object Enron{
   val conf = new SparkConf()
     .setMaster("local")
     .setAppName("Enron")
   val sc = new SparkContext(conf)
 
-  //val hiveCtx = new HiveContext(sc)
-
-  case class Email(date: String, subject: String, from: String, to: Array[String], cc: Array[String], bcc: Array[String]){
-//    override def toString() = {
-//      date + ",\n" +
-//      subject + ",\n" +
-//      from + ",\n" +
-//      "To: " + to mkString(",\n\t") +
-//        "Cc: " + cc mkString(",\n\t") +
-//        "Bcc: " + bcc mkString(",\n\t")
-//    }
-  }
+  case class Email(date: String, subject: String, from: String, to: Array[String], cc: Array[String], bcc: Array[String])
 
   def emailSplit(emText: String): Email = {
     val em = emText replaceAll("\n", " ") split (" ") filter (x => x.length > 0)
@@ -41,16 +32,22 @@ object Enron extends App {
       emailSplit0(em, "Bcc:", new Array[String](0)))
   }
 
-  val emails = sc.wholeTextFiles("/home/nnon/dev/enron/maildir/*/*/*.", 2)
-  val emailLines = emails.mapValues(emailSplit).cache()
-  val emailFrom = emailLines.mapValues(em => em.from)
-  val emailTo = emailLines.mapValues(em => em.to.mkString(",")).flatMapValues(to => to split(",")).filter(x => !x._2.isEmpty).cache()
-  val emailDetails = emailFrom.fullOuterJoin(emailTo)
-    .values
-    .map{case(from, to) => ((from.getOrElse("No Sender"), to.getOrElse("No recipient")), 1)}
-    .reduceByKey(_ + _)
-    .map(item => item swap)
-    .sortByKey(false)
+  def main (args: Array[String]) {
+    if (args.length != 2 || File(args(1)).exists){
+      println("Invalid options: [input data] [output location]")
+      System.exit(1)
+    }
+    val emails = sc.wholeTextFiles(args(0).toString, 2)
+    val emailLines = emails.mapValues(emailSplit).cache()
+    val emailFrom = emailLines.mapValues(em => em.from)
+    val emailTo = emailLines.mapValues(em => em.to.mkString(",")).flatMapValues(to => to split(",")).filter(x => !x._2.isEmpty).cache()
+    val emailDetails = emailFrom.fullOuterJoin(emailTo)
+      .values
+      .map{case(from, to) => ((from.getOrElse("No Sender"), to.getOrElse("No recipient")), 1)}
+      .reduceByKey(_ + _)
+      .map(item => item swap)
+      .sortByKey(false)
 
-  emailDetails.saveAsTextFile("topEmails.txt")//.foreach(println(_))//.foreach(line => println(line._1, line._2._1, line._2._2.mkString(" ")))
+    emailDetails.saveAsTextFile(args(1))
+  }
 }
